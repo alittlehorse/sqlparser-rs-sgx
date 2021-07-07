@@ -52,13 +52,22 @@ pub extern "C" fn lexer(sql: *const u8, sql_len: usize) -> sgx_status_t {
     let mut query = String::from_utf8(str_slice.to_vec()).unwrap();
     println!("{}", &query);
 
-    assert_eq!(test_for_fmt(),true);
-    test_Tokenizer_new(&query);
-    test_make_word();
-    println!("test end!");
+    //assert_eq!(test_for_fmt(),true);
+    //test_Tokenizer_new(&query);
+    //test_make_word();
+    //tokenize_select_1();
+    //println!("test end!");
+
+    let dialect = dialect::AnsiDialect {};
+    let mut tokenizer = Tokenizer::new(&dialect, &query);
+    let tokens = tokenizer.tokenize().unwrap();
+
+    println!("------------------------------");
+    println!("tokens   = {:?}", tokens);
     sgx_status_t::SGX_SUCCESS
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     /// An end-of-file marker, not a real token
     EOF,
@@ -188,7 +197,7 @@ impl fmt::Display for Token {
         }
     }
 }
-
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Word {
     /// The value of the token, without the enclosing quotes, and with the
     /// escape sequences (if any) processed (TODO: escapes are not handled)
@@ -214,7 +223,7 @@ impl fmt::Display for Word {
         }
     }
 }
-
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Whitespace {
     Space,
     Newline,
@@ -232,7 +241,7 @@ impl fmt::Display for Whitespace {
         }
     }
 }
-
+#[derive(Debug, PartialEq)]
 pub struct TokenizerError {
     pub message: String,
     pub line: u64,
@@ -531,4 +540,28 @@ pub fn test_make_word(){
         },
     };
     assert_eq!(a.value,String::from("ROW"));
+}
+
+pub fn tokenize_select_1() {
+    let sql = String::from("SELECT 1");
+    let dialect = dialect::AnsiDialect {};
+    let mut tokenizer = Tokenizer::new(&dialect, &sql);
+    let tokens = tokenizer.tokenize().unwrap();
+
+    let expected = vec![
+        Token::make_keyword("SELECT"),
+        Token::Whitespace(Whitespace::Space),
+        Token::Number(String::from("1")),
+    ];
+
+    compare(expected, tokens);
+}
+
+
+fn compare(expected: Vec<Token>, actual: Vec<Token>) {
+    println!("------------------------------");
+    println!("tokens   = {:?}", actual);
+    println!("expected = {:?}", expected);
+    println!("------------------------------");
+    assert_eq!(expected, actual);
 }

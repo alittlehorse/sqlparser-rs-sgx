@@ -74,7 +74,7 @@ fn main() {
         }
     }
 
-    println!("[+] say_something success...");
+    println!("[+] lexer success...");
 
     enclave.destroy();
 }
