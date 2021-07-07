@@ -49,10 +49,11 @@ pub extern "C" fn lexer(sql: *const u8, sql_len: usize) -> sgx_status_t {
     //let _ = io::stdout().write(str_slice);
 
     // Construct a string from &'static string
-    let mut query = String::from_utf8_lossy(str_slice);
+    let mut query = String::from_utf8(str_slice.to_vec()).unwrap();
     println!("{}", &query);
 
     assert_eq!(test_for_fmt(),true);
+    test_Tokenizer_new(&query);
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -214,7 +215,30 @@ impl fmt::Display for Whitespace {
     }
 }
 
+pub struct Tokenizer<'a> {
+    dialect: &'a dyn Dialect,
+    pub query: String,
+    pub line: u64,
+    pub col: u64,
+}
 
+impl<'a> Tokenizer<'a> {
+    /// Create a new SQL tokenizer for the specified SQL statement
+    pub fn new(dialect: &'a dyn Dialect, query: &str) -> Self {
+        Self {
+            dialect,
+            query: String::from(query),
+            line: 1,
+            col: 1,
+        }
+    }
+}
+
+
+
+
+//========================================
+//test scop
 pub fn test_for_fmt()->bool{
     let word = Word{
         value:String::from("SELECT"),
@@ -238,5 +262,15 @@ pub fn test_for_fmt()->bool{
         _ => false
     };
     result
+}
 
+pub fn test_Tokenizer_new(query:&String){
+    let dialect = dialect::AnsiDialect {};
+    //let result = true;
+    let tokenizer = Tokenizer::new(&dialect,query);
+    assert_eq!(tokenizer.col,1);
+    assert_eq!(tokenizer.line,1);
+    assert_eq!(tokenizer.query,String::from(query));
+    assert_eq!(tokenizer.dialect.is_delimited_identifier_start('\"'),true);
+    //result
 }
