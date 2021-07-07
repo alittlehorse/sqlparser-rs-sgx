@@ -54,6 +54,8 @@ pub extern "C" fn lexer(sql: *const u8, sql_len: usize) -> sgx_status_t {
 
     assert_eq!(test_for_fmt(),true);
     test_Tokenizer_new(&query);
+    test_make_word();
+    println!("test end!");
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -63,7 +65,7 @@ pub enum Token {
     /// A keyword (like SELECT) or an optionally quoted SQL identifier
     Word(Word),
     /// An unsigned numeric literal
-    Number(String, bool),
+    Number(String),
     /// A character that could not be tokenized
     Char(char),
     /// Single quoted string: i.e: 'string'
@@ -130,12 +132,27 @@ pub enum Token {
     RBrace,
 }
 
+impl Token {
+    pub fn make_keyword(keyword: &str) -> Self {
+        Token::make_word(keyword, None)
+    }
+    pub fn make_word(word: &str, quote_style: Option<char>) -> Self {
+        let word_uppercase = word.to_uppercase();
+        Token::Word(Word {
+            value: String::from(word),
+            quote_style,
+            keyword: Keyword::NONE
+            //TODO: match value and keyword!!!!
+        })
+    }
+}
+
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Token::EOF => f.write_str("EOF"),
             Token::Word(ref w) => write!(f, "{}", w),
-            Token::Number(ref n, l) => write!(f, "{}{long}", n, long = if *l { "L" } else { "" }),
+            Token::Number(ref n) => write!(f, "{}", n),
             Token::Char(ref c) => write!(f, "{}", c),
             Token::SingleQuotedString(ref s) => write!(f, "'{}'", s),
             Token::NationalStringLiteral(ref s) => write!(f, "N'{}'", s),
@@ -185,6 +202,7 @@ pub struct Word {
     pub keyword: Keyword,
 }
 
+
 impl fmt::Display for Word {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.quote_style {
@@ -215,6 +233,12 @@ impl fmt::Display for Whitespace {
     }
 }
 
+pub struct TokenizerError {
+    pub message: String,
+    pub line: u64,
+    pub col: u64,
+}
+
 pub struct Tokenizer<'a> {
     dialect: &'a dyn Dialect,
     pub query: String,
@@ -232,9 +256,228 @@ impl<'a> Tokenizer<'a> {
             col: 1,
         }
     }
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, TokenizerError> {
+        let mut peekable = self.query.chars().peekable();
+
+        let mut tokens: Vec<Token> = vec![];
+
+        while let Some(token) = self.next_token(&mut peekable)? {
+            match &token {
+                Token::Whitespace(Whitespace::Newline) => {
+                    self.line += 1;
+                    self.col = 1;
+                }
+
+                Token::Whitespace(Whitespace::Tab) => self.col += 4,
+                Token::Word(w) if w.quote_style == None => self.col += w.value.len() as u64,
+                Token::Word(w) if w.quote_style != None => self.col += w.value.len() as u64 + 2,
+                Token::Number(s) => self.col += s.len() as u64,
+                Token::SingleQuotedString(s) => self.col += s.len() as u64,
+                _ => self.col += 1,
+            }
+
+            tokens.push(token);
+        }
+        Ok(tokens)
+    }
+
+    fn next_token(&self, chars: &mut Peekable<Chars<'_>>) -> Result<Option<Token>, TokenizerError> {
+        //println!("next_token: {:?}", chars.peek());
+        match chars.peek() {
+            Some(&ch) => match ch {
+                ' ' => self.consume_and_return(chars, Token::Whitespace(Whitespace::Space)),
+                '\t' => self.consume_and_return(chars, Token::Whitespace(Whitespace::Tab)),
+                '\n' => self.consume_and_return(chars, Token::Whitespace(Whitespace::Newline)),
+                '\r' => {
+                    // Emit a single Whitespace::Newline token for \r and \r\n
+                    chars.next();
+                    if let Some('\n') = chars.peek() {
+                        chars.next();
+                    }
+                    Ok(Some(Token::Whitespace(Whitespace::Newline)))
+                }
+                // identifier or keyword
+                ch if self.dialect.is_identifier_start(ch) => {
+                    chars.next(); // consume the first char
+                    let s = self.tokenize_word(ch, chars);
+
+                    if s.chars().all(|x| ('0'..='9').contains(&x) || x == '.') {
+                        let mut s = peeking_take_while(&mut s.chars().peekable(), |ch| {
+                            matches!(ch, '0'..='9' | '.')
+                        });
+                        let s2 = peeking_take_while(chars, |ch| matches!(ch, '0'..='9' | '.'));
+                        s += s2.as_str();
+                        return Ok(Some(Token::Number(s)));
+                    }
+                    Ok(Some(Token::make_word(&s, None)))
+                }
+                // string
+                '\'' => {
+                    let s = self.tokenize_single_quoted_string(chars)?;
+                    Ok(Some(Token::SingleQuotedString(s)))
+                }
+                // delimited (quoted) identifier
+                '\"' if self.dialect.is_delimited_identifier_start('\"') => {
+                    chars.next(); // consume the opening quote
+                    let s = peeking_take_while(chars, |ch| ch != '\"');
+                    if chars.next() == Some('\"') {
+                        Ok(Some(Token::make_word(&s, Some('\"'))))
+                    } else {
+                        self.tokenizer_error(
+                            format!("Expected close delimiter '{}' before EOF.", '\"')
+                                .as_str(),
+                        )
+                    }
+                }
+                // numbers
+                '0'..='9' => {
+                    let mut s = peeking_take_while(chars, |ch| matches!(ch, '0'..='9'));
+                    // match one period
+                    Ok(Some(Token::Number(s)))
+                }
+                // punctuation
+                '(' => self.consume_and_return(chars, Token::LParen),
+                ')' => self.consume_and_return(chars, Token::RParen),
+                ',' => self.consume_and_return(chars, Token::Comma),
+                // operators
+                '-' => self.consume_and_return(chars, Token::Minus),
+                '/' => {
+                    chars.next(); // consume the '/'
+                    match chars.peek() {
+                        Some('/')  => {
+                            chars.next(); // consume the second '/', starting a snowflake single-line comment
+                            let comment = self.tokenize_single_line_comment(chars);
+                            Ok(Some(Token::Whitespace(Whitespace::LineComment(comment))))
+                        }
+                        // a regular '/' operator
+                        _ => Ok(Some(Token::Div)),
+                    }
+                }
+                '+' => self.consume_and_return(chars, Token::Plus),
+                '*' => self.consume_and_return(chars, Token::Mult),
+                '%' => self.consume_and_return(chars, Token::Mod),
+                '|' => {
+                    chars.next(); // consume the '|'
+                    match chars.peek() {
+                        Some('|') => self.consume_and_return(chars,Token::StringConcat),
+                        _ => Ok(Some(Token::Pipe))
+                        }
+                    }
+                '=' => self.consume_and_return(chars, Token::Eq),
+
+                '<' => {
+                    chars.next(); // consume
+                    match chars.peek() {
+                        Some('=') => self.consume_and_return(chars, Token::LtEq),
+                        Some('>') => self.consume_and_return(chars, Token::Neq),
+                        _ => Ok(Some(Token::Lt)),
+                    }
+                }
+                '>' => {
+                    chars.next(); // consume
+                    match chars.peek() {
+                        Some('=') => self.consume_and_return(chars, Token::GtEq),
+                        _ => Ok(Some(Token::Gt)),
+                    }
+                }
+                ':' =>  self.consume_and_return(chars, Token::Colon),
+                ';' => self.consume_and_return(chars, Token::SemiColon),
+                '\\' => self.consume_and_return(chars, Token::Backslash),
+                '[' => self.consume_and_return(chars, Token::LBracket),
+                ']' => self.consume_and_return(chars, Token::RBracket),
+                '&' => self.consume_and_return(chars, Token::Ampersand),
+                '^' => self.consume_and_return(chars, Token::Caret),
+                '{' => self.consume_and_return(chars, Token::LBrace),
+                '}' => self.consume_and_return(chars, Token::RBrace),
+                other => self.consume_and_return(chars, Token::Char(other)),
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn tokenizer_error<R>(&self, message: &str) -> Result<R, TokenizerError> {
+        Err(TokenizerError {
+            message: String::from(message),
+            col: self.col,
+            line: self.line,
+        })
+    }
+
+
+    #[allow(clippy::unnecessary_wraps)]
+    fn consume_and_return(
+        &self,
+        chars: &mut Peekable<Chars<'_>>,
+        t: Token,
+    ) -> Result<Option<Token>, TokenizerError> {
+        chars.next();
+        Ok(Some(t))
+    }
+
+    /// Tokenize an identifier or keyword, after the first char is already consumed.
+    fn tokenize_word(&self, first_char: char, chars: &mut Peekable<Chars<'_>>) -> String {
+        let mut s = String::from(first_char);
+        s.push_str(&peeking_take_while(chars, |ch| {
+            self.dialect.is_identifier_part(ch)
+        }));
+        s
+    }
+        /// Read a single quoted string, starting with the opening quote.
+    fn tokenize_single_quoted_string(
+        &self,
+        chars: &mut Peekable<Chars<'_>>,
+    ) -> Result<String, TokenizerError> {
+        let mut s = String::new();
+        chars.next(); // consume the opening quote
+        while let Some(&ch) = chars.peek() {
+            match ch {
+                '\'' => {
+                    chars.next(); // consume
+                    let escaped_quote = chars.peek().map(|c| *c == '\'').unwrap_or(false);
+                    if escaped_quote {
+                        s.push('\'');
+                        chars.next();
+                    } else {
+                        return Ok(s);
+                    }
+                }
+                _ => {
+                    chars.next(); // consume
+                    s.push(ch);
+                }
+            }
+        }
+        self.tokenizer_error("Unterminated string literal")
+    }
+    // Consume characters until newline
+    fn tokenize_single_line_comment(&self, chars: &mut Peekable<Chars<'_>>) -> String {
+        let mut comment = peeking_take_while(chars, |ch| ch != '\n');
+        if let Some(ch) = chars.next() {
+            assert_eq!(ch, '\n');
+            comment.push(ch);
+        }
+        comment
+    }
 }
 
-
+/// Read from `chars` until `predicate` returns `false` or EOF is hit.
+/// Return the characters read as String, and keep the first non-matching
+/// char available as `chars.next()`.
+fn peeking_take_while(
+    chars: &mut Peekable<Chars<'_>>,
+    mut predicate: impl FnMut(char) -> bool,
+) -> String {
+    let mut s = String::new();
+    while let Some(&ch) = chars.peek() {
+        if predicate(ch) {
+            chars.next(); // consume
+            s.push(ch);
+        } else {
+            break;
+        }
+    }
+    s
+}
 
 
 //========================================
@@ -273,4 +516,19 @@ pub fn test_Tokenizer_new(query:&String){
     assert_eq!(tokenizer.query,String::from(query));
     assert_eq!(tokenizer.dialect.is_delimited_identifier_start('\"'),true);
     //result
+}
+
+pub fn test_make_word(){
+    println!("test make_word fn!");
+    let token = Token::make_keyword("ROW");
+    //let token1 = Token::make_word("id#1", Optioin<char>('\"'));
+    let a = match token{
+        Token::Word(w)=> w,
+        _ => Word{
+            value:String::from("ERRO"),
+            quote_style : None,
+            keyword : Keyword::NONE,
+        },
+    };
+    assert_eq!(a.value,String::from("ROW"));
 }
