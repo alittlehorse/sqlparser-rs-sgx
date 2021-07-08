@@ -28,12 +28,19 @@ extern crate sgx_types;
 #[macro_use]
 extern crate sgx_tstd as std;
 
+extern crate sgx_serialize;
+use sgx_serialize::{SerializeHelper, DeSerializeHelper};
+#[macro_use]
+extern crate sgx_serialize_derive;
+
 use sgx_types::*;
 use std::string::String;
 use std::vec::Vec;
 use std::io::{self, Write};
 use std::slice;
 use std::fmt;
+use std::ffi::CString;
+use std::os::raw::c_char;
 
 use std::iter::Peekable;
 use std::str::Chars;
@@ -61,13 +68,16 @@ pub extern "C" fn lexer(sql: *const u8, sql_len: usize) -> sgx_status_t {
     let dialect = dialect::AnsiDialect {};
     let mut tokenizer = Tokenizer::new(&dialect, &query);
     let tokens = tokenizer.tokenize().unwrap();
+    let helper = SerializeHelper::new();
 
     println!("------------------------------");
-    println!("tokens   = {:?}", tokens);
+    println!("tokens   = {:?}", &tokens);
+    let mut json = helper.encode(&tokens).unwrap();
+    println!("{:?}",json);
     sgx_status_t::SGX_SUCCESS
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash,Serializable, DeSerializable)]
 pub enum Token {
     /// An end-of-file marker, not a real token
     EOF,
@@ -197,7 +207,7 @@ impl fmt::Display for Token {
         }
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash,Serializable, DeSerializable)]
 pub struct Word {
     /// The value of the token, without the enclosing quotes, and with the
     /// escape sequences (if any) processed (TODO: escapes are not handled)
@@ -223,7 +233,7 @@ impl fmt::Display for Word {
         }
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash,Serializable, DeSerializable)]
 pub enum Whitespace {
     Space,
     Newline,
@@ -241,7 +251,7 @@ impl fmt::Display for Whitespace {
         }
     }
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq,Serializable, DeSerializable)]
 pub struct TokenizerError {
     pub message: String,
     pub line: u64,

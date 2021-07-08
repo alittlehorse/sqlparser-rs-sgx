@@ -13,6 +13,11 @@ default = []
 [target.'cfg(not(target_env = "sgx"))'.dependencies]
 sgx_types = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tstd = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_serialize = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+
+[dependencies]
+sgx_serialize_derive = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_alloc = { path = "../incubator-teaclave-sgx-sdk/sgx_alloc" }
