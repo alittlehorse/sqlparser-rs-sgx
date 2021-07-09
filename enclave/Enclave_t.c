@@ -31,6 +31,8 @@ typedef struct ms_lexer_t {
 	sgx_status_t ms_retval;
 	const uint8_t* ms_sql;
 	size_t ms_len;
+	uint8_t* ms_result;
+	size_t ms_result_len;
 } ms_lexer_t;
 
 typedef struct ms_t_global_init_ecall_t {
@@ -478,8 +480,13 @@ static sgx_status_t SGX_CDECL sgx_lexer(void* pms)
 	size_t _tmp_len = ms->ms_len;
 	size_t _len_sql = _tmp_len;
 	uint8_t* _in_sql = NULL;
+	uint8_t* _tmp_result = ms->ms_result;
+	size_t _tmp_result_len = ms->ms_result_len;
+	size_t _len_result = _tmp_result_len;
+	uint8_t* _in_result = NULL;
 
 	CHECK_UNIQUE_POINTER(_tmp_sql, _len_sql);
+	CHECK_UNIQUE_POINTER(_tmp_result, _len_result);
 
 	//
 	// fence after pointer checks
@@ -504,11 +511,31 @@ static sgx_status_t SGX_CDECL sgx_lexer(void* pms)
 		}
 
 	}
+	if (_tmp_result != NULL && _len_result != 0) {
+		if ( _len_result % sizeof(*_tmp_result) != 0)
+		{
+			status = SGX_ERROR_INVALID_PARAMETER;
+			goto err;
+		}
+		if ((_in_result = (uint8_t*)malloc(_len_result)) == NULL) {
+			status = SGX_ERROR_OUT_OF_MEMORY;
+			goto err;
+		}
 
-	ms->ms_retval = lexer((const uint8_t*)_in_sql, _tmp_len);
+		memset((void*)_in_result, 0, _len_result);
+	}
+
+	ms->ms_retval = lexer((const uint8_t*)_in_sql, _tmp_len, _in_result, _tmp_result_len);
+	if (_in_result) {
+		if (memcpy_s(_tmp_result, _len_result, _in_result, _len_result)) {
+			status = SGX_ERROR_UNEXPECTED;
+			goto err;
+		}
+	}
 
 err:
 	if (_in_sql) free(_in_sql);
+	if (_in_result) free(_in_result);
 	return status;
 }
 

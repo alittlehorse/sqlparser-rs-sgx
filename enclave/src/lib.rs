@@ -39,8 +39,7 @@ use std::vec::Vec;
 use std::io::{self, Write};
 use std::slice;
 use std::fmt;
-use std::ffi::CString;
-use std::os::raw::c_char;
+use std::ptr;
 
 use std::iter::Peekable;
 use std::str::Chars;
@@ -49,7 +48,7 @@ use dialect::Dialect;
 use dialect::keywords::Keyword;
 
 #[no_mangle]
-pub extern "C" fn lexer(sql: *const u8, sql_len: usize) -> sgx_status_t {
+pub extern "C" fn lexer(sql: *const u8, sql_len: usize,result: *mut u8,mut result_len: usize) -> sgx_status_t {
 
     println!("{}", "we are in Enclave now");
     let str_slice = unsafe { slice::from_raw_parts(sql, sql_len) };
@@ -72,8 +71,17 @@ pub extern "C" fn lexer(sql: *const u8, sql_len: usize) -> sgx_status_t {
 
     println!("------------------------------");
     println!("tokens   = {:?}", &tokens);
-    let mut json = helper.encode(&tokens).unwrap();
-    println!("{:?}",json);
+    //let mut json = helper.encode(&tokens).unwrap();
+    //println!("{:?}",&json);
+    //let result_slice = &mut json[..];
+    //let len = result_slice.len();
+    //println!("{:?}",&len);
+    //unsafe{
+    //    ptr::copy_nonoverlapping(result_slice.as_ptr(),
+    //    result,
+    //    len);
+    //}
+    //result_len = len;
     sgx_status_t::SGX_SUCCESS
 }
 

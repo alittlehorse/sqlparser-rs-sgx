@@ -23,8 +23,8 @@ use sgx_urts::SgxEnclave;
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 extern {
-    fn lexer(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
-                     some_string: *const u8, len: usize) -> sgx_status_t;
+        fn lexer(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
+            sql: *const u8, sql_len: usize,result: *mut u8, result_len: usize) -> sgx_status_t;
 }
 
 fn init_enclave() -> SgxResult<SgxEnclave> {
@@ -58,16 +58,19 @@ fn main() {
     let input_string = String::from("SELECT * FROM customer WHERE id = 1 LIMIT 5\n");
 
     let mut retval = sgx_status_t::SGX_SUCCESS;
-
+    let mut lexer_result = "".as_ptr() as *mut u8;
+    let mut lexer_len:usize = 1;
     let result = unsafe {
         lexer(enclave.geteid(),
                       &mut retval,
                       input_string.as_ptr() as * const u8,
-                      input_string.len())
+                      input_string.len(),lexer_result,lexer_len)
     };
 
     match result {
-        sgx_status_t::SGX_SUCCESS => {},
+        sgx_status_t::SGX_SUCCESS => {
+            println!("{}",lexer_len.to_string());
+        },
         _ => {
             println!("[-] ECALL Enclave Failed {}!", result.as_str());
             return;
