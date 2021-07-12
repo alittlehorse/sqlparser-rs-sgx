@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-sgx_status_t lexer(const uint8_t* sql, size_t len, uint8_t* result, size_t result_len);
+sgx_status_t lexer(const uint8_t* sql, size_t len, uint8_t* output, size_t* output_len);
 void t_global_init_ecall(uint64_t id, const uint8_t* path, size_t len);
 void t_global_exit_ecall(void);
 

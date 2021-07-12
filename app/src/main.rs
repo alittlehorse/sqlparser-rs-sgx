@@ -19,12 +19,14 @@ extern crate sgx_types;
 extern crate sgx_urts;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
+use std::ffi::CString;
+use std::slice;
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 extern {
-        fn lexer(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
-            sql: *const u8, sql_len: usize,result: *mut u8, result_len: usize) -> sgx_status_t;
+    fn lexer(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
+        sql: *const u8, sql_len: usize,ouput: *mut u8,ouput_len:*mut usize) -> sgx_status_t;
 }
 
 fn init_enclave() -> SgxResult<SgxEnclave> {
@@ -59,18 +61,32 @@ fn main() {
 
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut lexer_result = "".as_ptr() as *mut u8;
-    let mut lexer_len:usize = 1;
+    let mut output_len:usize = 21;
+    let mut len_ptr:*mut usize = &mut output_len;
+    //let mut lexer_len:usize = 1;
+    //let lexer_output = CString::new("").expect("CString::new failed").into_bytes_with_nul().as_mut_ptr();
+    // let result = unsafe {
+    //     lexer(enclave.geteid(),
+    //                   &mut retval,
+    //                   input_string.as_ptr() as * const u8,
+    //                   input_string.len(),lexer_result)
+    // };
     let result = unsafe {
         lexer(enclave.geteid(),
                       &mut retval,
                       input_string.as_ptr() as * const u8,
-                      input_string.len(),lexer_result,lexer_len)
+                      input_string.len(),lexer_result,len_ptr)
     };
 
     match result {
         sgx_status_t::SGX_SUCCESS => {
-            println!("{}",lexer_len.to_string());
-        },
+            unsafe {
+                println!("==========\n out of enclace:the output len is {}",&*len_ptr);
+                let str_slice = unsafe {  slice::from_raw_parts(lexer_result,*len_ptr) };
+                println!("=========='{:?}n",str_slice);
+        };
+        }
+        ,
         _ => {
             println!("[-] ECALL Enclave Failed {}!", result.as_str());
             return;

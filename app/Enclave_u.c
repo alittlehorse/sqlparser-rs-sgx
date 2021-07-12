@@ -5,8 +5,8 @@ typedef struct ms_lexer_t {
 	sgx_status_t ms_retval;
 	const uint8_t* ms_sql;
 	size_t ms_len;
-	uint8_t* ms_result;
-	size_t ms_result_len;
+	uint8_t* ms_output;
+	size_t* ms_output_len;
 } ms_lexer_t;
 
 typedef struct ms_t_global_init_ecall_t {
@@ -989,14 +989,14 @@ static const struct {
 		(void*)Enclave_sgx_thread_set_multiple_untrusted_events_ocall,
 	}
 };
-sgx_status_t lexer(sgx_enclave_id_t eid, sgx_status_t* retval, const uint8_t* sql, size_t len, uint8_t* result, size_t result_len)
+sgx_status_t lexer(sgx_enclave_id_t eid, sgx_status_t* retval, const uint8_t* sql, size_t len, uint8_t* output, size_t* output_len)
 {
 	sgx_status_t status;
 	ms_lexer_t ms;
 	ms.ms_sql = sql;
 	ms.ms_len = len;
-	ms.ms_result = result;
-	ms.ms_result_len = result_len;
+	ms.ms_output = output;
+	ms.ms_output_len = output_len;
 	status = sgx_ecall(eid, 0, &ocall_table_Enclave, &ms);
 	if (status == SGX_SUCCESS && retval) *retval = ms.ms_retval;
 	return status;

@@ -40,6 +40,7 @@ use std::io::{self, Write};
 use std::slice;
 use std::fmt;
 use std::ptr;
+use std::ffi::CString;
 
 use std::iter::Peekable;
 use std::str::Chars;
@@ -48,39 +49,46 @@ use dialect::Dialect;
 use dialect::keywords::Keyword;
 
 #[no_mangle]
-pub extern "C" fn lexer(sql: *const u8, sql_len: usize,result: *mut u8,mut result_len: usize) -> sgx_status_t {
+#[warn(unused_assignments)]
+pub extern "C" fn lexer(sql: *const u8, sql_len: usize,mut output: *mut u8,mut output_len:*mut usize) -> sgx_status_t {
 
     println!("{}", "we are in Enclave now");
     let str_slice = unsafe { slice::from_raw_parts(sql, sql_len) };
-    //let _ = io::stdout().write(str_slice);
-
-    // Construct a string from &'static string
     let mut query = String::from_utf8(str_slice.to_vec()).unwrap();
     println!("{}", &query);
 
-    //assert_eq!(test_for_fmt(),true);
-    //test_Tokenizer_new(&query);
-    //test_make_word();
-    //tokenize_select_1();
-    //println!("test end!");
+    // assert_eq!(test_for_fmt(),true);
+    // test_Tokenizer_new(&query);
+    // test_make_word();
+    // tokenize_select_1();
+    // println!("test end!");
 
     let dialect = dialect::AnsiDialect {};
     let mut tokenizer = Tokenizer::new(&dialect, &query);
     let tokens = tokenizer.tokenize().unwrap();
     let helper = SerializeHelper::new();
-
     println!("------------------------------");
     println!("tokens   = {:?}", &tokens);
-    //let mut json = helper.encode(&tokens).unwrap();
-    //println!("{:?}",&json);
-    //let result_slice = &mut json[..];
-    //let len = result_slice.len();
-    //println!("{:?}",&len);
-    //unsafe{
-    //    ptr::copy_nonoverlapping(result_slice.as_ptr(),
-    //    result,
-    //    len);
-    //}
+    let mut json = helper.encode(&tokens).unwrap();
+    println!("{:?}",&json);
+    //let serialized = serde_json::to_string(&json);
+    let output_slice = (&mut json[..]);
+    unsafe{
+        *output_len = output_slice.len();
+        println!("in encalve :the len is {}\n",*output_len);
+    }
+    // unsafe{
+    //     ptr::copy_nonoverlapping(result_slice.as_ptr(),
+    //     result,
+    //     len);
+    // }
+
+    output = output_slice.as_mut_ptr();
+    // unsafe{
+    //     let re = CString::from_vec_unchecked(json);
+    //     result = re.into_raw();
+
+    // };
     //result_len = len;
     sgx_status_t::SGX_SUCCESS
 }
