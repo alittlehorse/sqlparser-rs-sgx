@@ -22,7 +22,7 @@
 
 #![cfg_attr(not(target_env = "sgx"), no_std)]
 #![cfg_attr(target_env = "sgx", feature(rustc_private))]
-
+#![feature(slice_ptr_len)]
 extern crate sgx_types;
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
@@ -33,14 +33,14 @@ use sgx_serialize::{SerializeHelper, DeSerializeHelper};
 #[macro_use]
 extern crate sgx_serialize_derive;
 
+
+use std::ptr;
 use sgx_types::*;
 use std::string::String;
 use std::vec::Vec;
 use std::io::{self, Write};
 use std::slice;
 use std::fmt;
-use std::ptr;
-use std::ffi::CString;
 
 use std::iter::Peekable;
 use std::str::Chars;
@@ -75,15 +75,15 @@ pub extern "C" fn lexer(sql: *const u8, sql_len: usize,mut output: *mut u8,mut o
     let output_slice = (&mut json[..]);
     unsafe{
         *output_len = output_slice.len();
-        println!("in encalve :the len is {}\n",*output_len);
+        //println!("in encalve :the len is {}\n",*output_len);
     }
-    // unsafe{
-    //     ptr::copy_nonoverlapping(result_slice.as_ptr(),
-    //     result,
-    //     len);
-    // }
+    unsafe{
+        output_slice.as_mut_ptr().copy_to(output, *output_len)
+        //  output,
+        //  output_len);
+         }
 
-    output = output_slice.as_mut_ptr();
+   // output = output_slice.as_mut_ptr();
     // unsafe{
     //     let re = CString::from_vec_unchecked(json);
     //     result = re.into_raw();

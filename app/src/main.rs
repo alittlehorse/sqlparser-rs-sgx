@@ -19,10 +19,15 @@ extern crate sgx_types;
 extern crate sgx_urts;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
-use std::ffi::CString;
 use std::slice;
 
+extern crate sgx_serialize;
+use sgx_serialize::{SerializeHelper, DeSerializeHelper};
+#[macro_use]
+extern crate sgx_serialize_derive;
+
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
+mod tokens;
 
 extern {
     fn lexer(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
@@ -60,17 +65,9 @@ fn main() {
     let input_string = String::from("SELECT * FROM customer WHERE id = 1 LIMIT 5\n");
 
     let mut retval = sgx_status_t::SGX_SUCCESS;
-    let mut lexer_result = "".as_ptr() as *mut u8;
-    let mut output_len:usize = 21;
+    let mut lexer_result:*mut u8 = vec![0;100].as_mut_ptr();
+    let mut output_len:usize = 100;
     let mut len_ptr:*mut usize = &mut output_len;
-    //let mut lexer_len:usize = 1;
-    //let lexer_output = CString::new("").expect("CString::new failed").into_bytes_with_nul().as_mut_ptr();
-    // let result = unsafe {
-    //     lexer(enclave.geteid(),
-    //                   &mut retval,
-    //                   input_string.as_ptr() as * const u8,
-    //                   input_string.len(),lexer_result)
-    // };
     let result = unsafe {
         lexer(enclave.geteid(),
                       &mut retval,
@@ -83,6 +80,7 @@ fn main() {
             unsafe {
                 println!("==========\n out of enclace:the output len is {}",&*len_ptr);
                 let str_slice = unsafe {  slice::from_raw_parts(lexer_result,*len_ptr) };
+
                 println!("=========='{:?}n",str_slice);
         };
         }

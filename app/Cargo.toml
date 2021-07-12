@@ -7,7 +7,17 @@ build = "build.rs"
 [dependencies]
 sgx_types =  { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_urts =  { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_serialize_derive = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+
+[target.'cfg(not(target_env = "sgx"))'.dependencies]
+sgx_serialize = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../incubator-teaclave-sgx-sdk/sgx_types" }
 sgx_urts = { path = "../incubator-teaclave-sgx-sdk/sgx_urts" }
+sgx_serialize = { path = "../incubator-teaclave-sgx-sdk/sgx_serialize" }
+sgx_serialize_derive = { path = "../incubator-teaclave-sgx-sdk/sgx_serialize_derive" }
+sgx_serialize_derive_internals = { path = "../incubator-teaclave-sgx-sdk/sgx_serialize_derive_internals" }
+
+
+

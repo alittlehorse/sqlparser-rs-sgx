@@ -4,6 +4,8 @@
 name = "app"
 version = "1.0.0"
 dependencies = [
+ "sgx_serialize",
+ "sgx_serialize_derive",
  "sgx_types",
  "sgx_urts",
 ]
